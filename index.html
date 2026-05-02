@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <title>机器人团队项目管理数字化平台</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Microsoft YaHei", sans-serif; }
+        body { background: #f5f7fa; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        
+        /* 登录框样式 */
+        .login-box { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 400px; margin: 60px auto; text-align: center; }
+        input, select, button { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; font-size: 15px; }
+        button { background: #409eff; color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        button:hover { background: #337ecc; }
+
+        /* 头部样式 */
+        .header { background: white; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .user-info { font-size: 14px; color: #666; }
+        .logout { color: #f56c6c; cursor: pointer; margin-left: 10px; font-weight: bold; }
+
+        /* 板块样式 */
+        .box { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .box h2 { font-size: 18px; margin-bottom: 15px; color: #333; display: flex; justify-content: space-between; align-items: center; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        table th, table td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 14px; }
+        table th { background: #fafafa; color: #666; }
+
+        /* 按钮样式 */
+        .btn-add { width: auto; padding: 6px 15px; font-size: 13px; background: #409eff; }
+        .btn-sync { width: auto; padding: 6px 15px; font-size: 13px; background: #67c23a; margin-left: 10px; }
+        .btn-edit { width: auto; padding: 4px 8px; font-size: 12px; background: #e6a23c; margin-right: 5px; }
+        .btn-del { width: auto; padding: 4px 8px; font-size: 12px; background: #f56c6c; }
+
+        /* 权限控制：默认隐藏所有管理按钮 */
+        .admin-action { display: none; }
+
+        /* 状态颜色 */
+        .checkin-normal { color: #67c23a; font-weight: bold; }
+        .checkin-absent { color: #f56c6c; font-weight: bold; }
+        .task-done { color: #67c23a; }
+        .task-doing { color: #409eff; }
+
+        /* 弹窗 */
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); display: none; justify-content: center; align-items: center; z-index: 999; }
+        .modal-content { background: white; padding: 25px; border-radius: 8px; width: 450px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- 登录页 -->
+    <div id="loginPage" class="login-box">
+        <h2>团队管理平台登录</h2>
+        <input id="username" placeholder="账号" />
+        <input id="password" type="password" placeholder="密码" />
+        <select id="role">
+            <option value="member">成员登录 (只读)</option>
+            <option value="admin">管理员登录 (编辑)</option>
+        </select>
+        <button onclick="login()">登 录</button>
+    </div>
+
+    <!-- 主页 -->
+    <div id="mainPage" style="display: none;">
+        <div class="header">
+            <h1>机器人团队项目管理数字化平台</h1>
+            <div class="user-info">
+                当前身份：<span id="showRole" style="color:#409eff; font-weight:bold;"></span>
+                <span class="logout" onclick="logout()">退出登录</span>
+            </div>
+        </div>
+
+        <!-- 1. 成员信息栏 -->
+        <div class="box">
+            <h2>
+                成员信息 (共<span id="userCount">0</span>人)
+                <button class="btn-add admin-action" onclick="openUserModal()">+ 添加成员</button>
+            </h2>
+            <table id="userTable">
+                <thead>
+                    <tr><th>姓名</th><th>生日</th><th>学号</th><th>专业</th><th>昵称</th><th class="admin-action">操作</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- 2. 周任务栏 -->
+        <div class="box">
+            <h2>
+                本周任务看板
+                <button class="btn-add admin-action" onclick="openTaskModal()">+ 发布任务</button>
+            </h2>
+            <table id="taskTable">
+                <thead>
+                    <tr><th>任务内容</th><th>负责人</th><th>截止日期</th><th>状态</th><th class="admin-action">操作</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- 3. 钉钉考勤 -->
+        <div class="box">
+            <h2>
+                钉钉同步考勤 (今日)
+                <button class="btn-sync admin-action" onclick="syncDingTalk()">🔄 同步钉钉接口</button>
+            </h2>
+            <table id="checkinTable">
+                <thead>
+                    <tr><th>日期</th><th>姓名</th><th>上班</th><th>下班</th><th>状态</th><th class="admin-action">操作</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- 4. 物资管理 -->
+        <div class="box">
+            <h2>
+                物资库存管理
+                <button class="btn-add admin-action" onclick="openMaterialModal()">+ 登记物资</button>
+            </h2>
+            <table id="materialTable">
+                <thead>
+                    <tr><th>物资名称</th><th>型号规格</th><th>剩余数量</th><th>存放位置</th><th class="admin-action">操作</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 通用模态框 -->
+<div class="modal" id="modal">
+    <div class="modal-content">
+        <h3 id="modalTitle" style="margin-bottom:15px;"></h3>
+        <div id="modalInputs">
+            <input id="inp1">
+            <input id="inp2">
+            <input id="inp3">
+            <input id="inp4">
+            <input id="inp5">
+        </div>
+        <button onclick="saveData()">保存提交</button>
+        <button onclick="closeModal()" style="background:#909399;">取消</button>
+    </div>
+</div>
+
+<script>
+let currentRole = "";
+let currentType = "";
+let currentEditId = null;
+
+const STORAGE_KEYS = {
+    users: "db_users",
+    tasks: "db_tasks",
+    materials: "db_materials",
+    checkins: "db_checkins"
+};
+
+// --- 初始化与登录 ---
+window.onload = () => {
+    const role = localStorage.getItem("role");
+    if (role) {
+        currentRole = role;
+        showMain(role);
+    }
+};
+
+function login() {
+    const u = document.getElementById("username").value;
+    const p = document.getElementById("password").value;
+    const r = document.getElementById("role").value;
+
+    if (r === "admin" && u === "admin" && p === "123456") {
+        currentRole = "管理员";
+    } else if (r === "member" && u === "member" && p === "123456") {
+        currentRole = "成员";
+    } else {
+        alert("账号或密码错误！(提示: admin/123456 或 member/123456)");
+        return;
+    }
+    localStorage.setItem("role", currentRole);
+    showMain(currentRole);
+}
+
+function showMain(role) {
+    document.getElementById("loginPage").style.display = "none";
+    document.getElementById("mainPage").style.display = "block";
+    document.getElementById("showRole").innerText = role;
+
+    // 核心权限：如果是管理员，显示所有 admin-action 元素
+    if (role === "管理员") {
+        const adminBtns = document.querySelectorAll('.admin-action');
+        adminBtns.forEach(el => el.style.display = "inline-block");
+    }
+    renderAll();
+}
+
+function logout() {
+    localStorage.clear();
+    location.reload();
+}
+
+// --- 数据渲染 ---
+function renderAll() {
+    renderTable("user", STORAGE_KEYS.users, ["name", "birthday", "sid", "major", "nickname"]);
+    renderTable("task", STORAGE_KEYS.tasks, ["content", "owner", "deadline", "status"]);
+    renderTable("material", STORAGE_KEYS.materials, ["name", "model", "count", "pos"]);
+    renderCheckins();
+}
+
+function renderTable(type, key, fields) {
+    const list = JSON.parse(localStorage.getItem(key)) || [];
+    const tbody = document.querySelector(`#${type}Table tbody`);
+    if (type === 'user') document.getElementById("userCount").innerText = list.length;
+    
+    tbody.innerHTML = "";
+    list.forEach((item, index) => {
+        const tr = document.createElement("tr");
+        let html = "";
+        fields.forEach(f => html += `<td>${item[f] || '-'}</td>`);
+        
+        // 如果是管理员，添加操作列
+        if (currentRole === "管理员") {
+            html += `<td>
+                <button class="btn-edit" onclick="editItem('${type}', ${index})">编辑</button>
+                <button class="btn-del" onclick="deleteItem('${type}', ${index})">删除</button>
+            </td>`;
+        } else {
+            html += `<td>-</td>`; // 成员看到的操作列为空
+        }
+        tr.innerHTML = html;
+        tbody.appendChild(tr);
+    });
+}
+
+// --- 弹窗操作 ---
+function openUserModal() {
+    currentType = "user"; currentEditId = null;
+    setModal("添加新成员", ["姓名", "生日", "学号", "专业", "昵称"]);
+}
+
+function openTaskModal() {
+    currentType = "task"; currentEditId = null;
+    setModal("发布新任务", ["任务内容", "负责人", "截止日期", "当前状态(进行中/已完成)"]);
+}
+
+function openMaterialModal() {
+    currentType = "material"; currentEditId = null;
+    setModal("新增物资登记", ["物资名称", "型号规格", "数量", "存放位置"]);
+}
+
+function setModal(title, placeholders) {
+    document.getElementById("modalTitle").innerText = title;
+    const inputs = document.querySelectorAll("#modalInputs input");
+    inputs.forEach((inp, i) => {
+        inp.value = "";
+        if (placeholders[i]) {
+            inp.style.display = "block";
+            inp.placeholder = placeholders[i];
+        } else {
+            inp.style.display = "none";
+        }
+    });
+    document.getElementById("modal").style.display = "flex";
+}
+
+function saveData() {
+    const inps = document.querySelectorAll("#modalInputs input");
+    const data = {};
+    const keys = {
+        user: ["name", "birthday", "sid", "major", "nickname"],
+        task: ["content", "owner", "deadline", "status"],
+        material: ["name", "model", "count", "pos"]
+    };
+
+    keys[currentType].forEach((key, i) => {
+        data[key] = inps[i].value;
+    });
+
+    let storageKey = STORAGE_KEYS[currentType + "s"];
+    let list = JSON.parse(localStorage.getItem(storageKey)) || [];
+
+    if (currentEditId !== null) {
+        list[currentEditId] = data;
+    } else {
+        list.push(data);
+    }
+
+    localStorage.setItem(storageKey, JSON.stringify(list));
+    closeModal();
+    renderAll();
+}
+
+function editItem(type, index) {
+    const storageKey = STORAGE_KEYS[type + "s"];
+    const list = JSON.parse(localStorage.getItem(storageKey));
+    const item = list[index];
+    currentEditId = index;
+    currentType = type;
+
+    const titles = { user: "编辑成员", task: "编辑任务", material: "编辑物资" };
+    const placeholders = {
+        user: ["姓名", "学号"],
+        task: ["任务内容", "负责人", "截止日期", "当前状态"],
+        material: ["物资名称", "型号规格", "数量", "存放位置"]
+    };
+
+    setModal(titles[type], placeholders[type]);
+    const inps = document.querySelectorAll("#modalInputs input");
+    const fields = {
+        user: ["name", "birthday", "sid", "major", "nickname"],
+        task: ["content", "owner", "deadline", "status"],
+        material: ["name", "model", "count", "pos"]
+    };
+    fields[type].forEach((f, i) => inps[i].value = item[f]);
+}
+
+function deleteItem(type, index) {
+    if (!confirm("确定要删除这条记录吗？")) return;
+    const storageKey = STORAGE_KEYS[type + "s"];
+    let list = JSON.parse(localStorage.getItem(storageKey));
+    list.splice(index, 1);
+    localStorage.setItem(storageKey, JSON.stringify(list));
+    renderAll();
+}
+
+function closeModal() { document.getElementById("modal").style.display = "none"; }
+
+// --- 钉钉同步逻辑 ---
+async function syncDingTalk() {
+    try {
+        const res = await fetch("http://127.0.0.1:5000/api/attendance");
+        const data = await res.json();
+        localStorage.setItem(STORAGE_KEYS.checkins, JSON.stringify(data.list));
+        renderCheckins();
+        if (data.no_checkin.length > 0) alert("同步成功！未签到人员：" + data.no_checkin.join(", "));
+    } catch (e) {
+        alert("同步失败：请确保 Python API 服务已启动 (127.0.0.1:5000)");
+    }
+}
+
+function renderCheckins() {
+    const list = JSON.parse(localStorage.getItem(STORAGE_KEYS.checkins)) || [];
+    const tbody = document.querySelector("#checkinTable tbody");
+    tbody.innerHTML = "";
+    list.forEach(item => {
+        const tr = document.createElement("tr");
+        const statusCls = item.status === "正常" ? "checkin-normal" : "checkin-absent";
+        tr.innerHTML = `
+            <td>${item.date}</td>
+            <td>${item.name}</td>
+            <td>${item.on || '-'}</td>
+            <td>${item.off || '-'}</td>
+            <td class="${statusCls}">${item.status}</td>
+            <td class="admin-action">${currentRole === '管理员' ? '<button class="btn-del" onclick="this.parentElement.parentElement.remove()">删除</button>' : '-'}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+</script>
+</body>
+</html>
